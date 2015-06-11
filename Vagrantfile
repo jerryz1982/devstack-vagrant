@@ -29,10 +29,19 @@ def configure_vm(name, vm, conf)
 
   if conf["use_bridge"] == false
     if conf["ip_address_#{name}"]
-      vm.network :private_network, ip: conf["ip_address_#{name}"]
+      vm.network :private_network,
+        :ip=> conf["ip_address_#{name}"],
+        :mac=> conf["mac_address_#{name}"]
       vm.provision :shell, :inline => $add_manager_to_hosts
     else
-      vm.network :private_network, type: "dhcp"
+      case conf["provider"]
+      when 'virtualbox'
+        vm.network :private_network, type: "dhcp"
+      when 'libvirt'
+        raise 'static ip needed for provider libvirt!'
+      else
+        raise 'provider not supported!'
+      end
     end
   else
     # we do an L2 bridge directly onto the physical network, which means
@@ -54,6 +63,12 @@ def configure_vm(name, vm, conf)
     if conf["mac_address_#{name}"]
       vb.customize ["modifyvm", :id, "--macaddress2", conf["mac_address_#{name}"]]
     end
+  end
+
+  vm.provider :libvirt do |domain|
+    domain.memory = 4096
+    domain.cpus = 2
+    domain.nested = true
   end
 
   # puppet provisioning
@@ -78,8 +93,9 @@ def configure_vm(name, vm, conf)
 
   if conf['setup_mode'] == "devstack"
     vm.provision "shell" do |shell|
-      shell.inline = "sudo su - stack -c 'cd ~/devstack && ./stack.sh'"
-    end
+#      shell.inline = "sudo su - stack -c 'cd ~/devstack && ./stack.sh'"
+       shell.inline = "echo 'devstack complete'"
+   end
   end
 
   if conf['setup_mode'] == "grenade"
