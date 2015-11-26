@@ -32,7 +32,10 @@ def configure_vm(name, vm, conf)
       vm.network :private_network,
         :ip=> conf["ip_address_#{name}"],
         :mac=> conf["mac_address_#{name}"]
-      vm.provision :shell, :inline => $add_manager_to_hosts
+        if conf["hostname_compute"] == name
+          vm.network :private_network,
+            :ip=> conf["ip_address_compute_tenant"]
+        end
     else
       case conf["provider"]
       when 'virtualbox'
@@ -43,6 +46,7 @@ def configure_vm(name, vm, conf)
         raise 'provider not supported!'
       end
     end
+    vm.provision :shell, :inline => $add_manager_to_hosts
   else
     # we do an L2 bridge directly onto the physical network, which means
     # that your OpenStack hosts (manager, compute) are directly in the
@@ -81,7 +85,8 @@ def configure_vm(name, vm, conf)
     puppet.facter = {
       ## tells default.pp that we're running in Vagrant
       "is_vagrant" => true,
-      "is_compute" => (name != "manager"),
+      "is_network" => (name == "network"),
+      "is_compute" => (name == "compute"),
       "use_ldap" => conf["use_ldap"] || false,
       "extra_images" => conf["extra_images"] || "",
     }
@@ -93,9 +98,9 @@ def configure_vm(name, vm, conf)
 
   if conf['setup_mode'] == "devstack"
     vm.provision "shell" do |shell|
-#      shell.inline = "sudo su - stack -c 'cd ~/devstack && ./stack.sh'"
-       shell.inline = "echo 'devstack complete'"
-   end
+       shell.inline = "sudo su - stack -c 'cd ~/devstack && ./stack.sh'"
+#       shell.inline = "echo 'devstack complete'"
+    end
   end
 
   if conf['setup_mode'] == "grenade"
@@ -167,11 +172,16 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   end
 
   if conf['hostname_compute']
-    config.vm.define "compute" do |compute|
+    config.vm.define "compute", autostart: false do |compute|
       configure_vm("compute", compute.vm, conf)
     end
   end
 
+  if conf['hostname_network']
+    config.vm.define "network", autostart: false do |network|
+      configure_vm("network", network.vm, conf)
+    end
+  end
   # If true, then any SSH connections made will enable agent forwarding.
   # Default value: false
   config.ssh.forward_agent = true
@@ -182,7 +192,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # argument is a set of non-required options.
   # config.vm.synced_folder "../data", "/vagrant_data"
   if conf['local_openstack_tree']
-    config.vm.synced_folder conf['local_openstack_tree'], "/home/vagrant/openstack"
+    config.vm.synced_folder conf['local_openstack_tree'], "/opt/stack", type: "rsync", rsync__args: ["--verbose", "--archive", "--delete", "-z"]
   end
 
 end

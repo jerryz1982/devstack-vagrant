@@ -42,6 +42,7 @@ class devstack(
     owner => $user,
     group => $user,
     mode => '0644',
+    ensure => present,
     content => template('devstack/local.erb'),
     require => File["$dir/local.sh"],
   }

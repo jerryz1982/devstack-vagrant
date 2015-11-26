@@ -1,11 +1,24 @@
 [[local|localrc]]
 
 disable_service n-net
-enable_service q-svc
-enable_service q-agt
-enable_service q-dhcp
-enable_service q-l3
-enable_service q-meta
+disable_service n-cpu
+disable_service ceilometer-acompute
+enable_service q-svc q-meta n-novnc
+
+NEUTRON_REPO=http://10.160.2.223:8080/neutron.git
+NEUTRON_BRANCH=stable/juno
+REQUIREMENTS_REPO=http://github.com/jerryz1982/requirements.git
+REQUIREMENTS_BRANCH=test_fortinet
+
+Q_PLUGIN=ml2
+ENABLE_TENANT_VLANS=True
+ML2_L3_PLUGIN=router_fortinet
+Q_ML2_PLUGIN_MECHANISM_DRIVERS='openvswitch,fortinet'
+Q_ML2_PLUGIN_VLAN_TYPE_OPTIONS='network_vlan_ranges=physnet1:1009:2999'
+Q_ML2_PLUGIN_TYPE_DRIVERS=local,flat,vlan,gre,vxlan
+Q_FORTINET_TENANT_INTERFACE=eth2
+OVS_PHYSICAL_BRIDGE=br-${Q_FORTINET_TENANT_INTERFACE}
+PHYSICAL_NETWORK=physnet1
 
 # generic configuration parameters
 
@@ -15,7 +28,6 @@ SERVICE_TOKEN=<%= @service_password %>
 SERVICE_PASSWORD=<%= @service_password %>
 ADMIN_PASSWORD=<%= @admin_password %>
 
-MULTI_HOST="True"
 API_RATE_LIMIT="False"
 RECLONE="True"
 
@@ -24,8 +36,6 @@ RECLONE="True"
 DATABASE_TYPE=mysql
 
 # networking configuration parameters
-
-GUEST_INTERFACE_DEFAULT=eth1
 HOST_IP_IFACE=eth1
 
 # logging configuration parameters
@@ -37,8 +47,8 @@ SCREEN_LOGDIR=/opt/stack/logs
 
 <% if @is_compute == "true" %>
 # generic configuration parameters (compute)
-
-ENABLED_SERVICES=n-cpu,q-agt,c-vol
+Q_PLUGIN=fortinet
+ENABLED_SERVICES=n-cpu,q-agt,c-vol,n-novnc
 SERVICE_HOST=<%= @hostname_manager %>
 MYSQL_HOST=$SERVICE_HOST
 RABBIT_HOST=$SERVICE_HOST
@@ -46,7 +56,17 @@ GLANCE_HOST=$SERVICE_HOST
 
 # configure ceilometer (compute)
 
-enable_service ceilometer-acompute
+#enable_service ceilometer-acompute
+
+<% elsif @is_network == "true" %>
+# generic configuration parameters (network)
+
+ENABLED_SERVICES=q-meta,q-l3
+SERVICE_HOST=<%= @hostname_manager %>
+MYSQL_HOST=$SERVICE_HOST
+RABBIT_HOST=$SERVICE_HOST
+GLANCE_HOST=$SERVICE_HOST
+
 <% else %>
 
 # configure images provided on glance (manager)
@@ -56,8 +76,8 @@ IMAGE_URLS="<%= @extra_images %>"
 # configure ceilometer (manager)
 
 enable_service dstat
-enable_service ceilometer-acompute ceilometer-acentral ceilometer-anotification ceilometer-collector ceilometer-api
-enable_service ceilometer-alarm-notifier ceilometer-alarm-evaluator
+#enable_service ceilometer-acentral ceilometer-anotification ceilometer-collector ceilometer-api
+#enable_service ceilometer-alarm-notifier ceilometer-alarm-evaluator
 CEILOMETER_BACKEND=mongodb
 
 <% if @use_ldap == "true" %>
@@ -69,7 +89,11 @@ enable_service ldap
 
 <% end %>
 
-[[post-config|$NOVA_CONF]]
-[DEFAULT]
-flat_interface = eth1
-vlan_interface = eth1
+[[post-config|/$Q_PLUGIN_CONF_FILE]]
+[ml2_fortinet]
+address = 192.168.121.187
+username = admin
+password = ''
+int_interface = port2
+ext_interface = port3
+npu_available = False
